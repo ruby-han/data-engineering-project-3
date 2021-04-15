@@ -1,0 +1,103 @@
+##### Set Up Directory and Contents - Perform This Once #####
+# change directory
+cd w205/project-3-ruby-han/
+
+# verify branch - assignment
+git status
+
+# copy YAML file
+cp ~/w205/course-content/12-Querying-Data-II/docker-compose.yml .
+
+# copy game_api.py file
+cp ~/w205/course-content/12-Querying-Data-II/game_api.py .
+
+# add events to game_api.py file
+vi game_api.py
+
+# added below
+@app.route("/join_guild")
+def join_guild():
+    join_guild_event = {'event_type': 'join_guild', 'description': 'large guild'}
+    log_to_kafka('events', join_guild_event)
+    return "Guild Joined!\n"
+
+
+@app.route("/purchase_an_axe")
+def purchase_an_axe():
+    purchase_axe_event = {'event_type': 'purchase_axe', 'description': 'large axe'}
+    log_to_kafka('events', purchase_axe_event)
+    return "Axe Purchased!\n"
+
+##### Docker ######
+# change directory
+cd w205/project-3-ruby-han/
+
+# verify branch - assignment
+git status
+
+# check docker containers
+docker ps -a
+
+# bring up cluster
+docker-compose up -d
+
+##### Kafka - Stream Events ######
+# create kafka "events" topic
+docker-compose exec kafka kafka-topics --create --topic events --partitions 1 --replication-factor 1 --if-not-exists --zookeeper zookeeper:32181
+
+##### Flask #####
+# run flask
+docker-compose exec mids env FLASK_APP=/w205/project-3-ruby-han/game_api.py flask run --host 0.0.0.0
+
+##### Curls - Replace with Apache Bench Later #####
+# switch to new terminal - navigate to project-3 directory
+cd w205/project-3-ruby-han/
+
+# run curls to put events on stream
+docker-compose exec mids curl http://localhost:5000/
+docker-compose exec mids curl http://localhost:5000/purchase_a_sword
+docker-compose exec mids curl http://localhost:5000/purchase_an_axe
+docker-compose exec mids curl http://localhost:5000/join_guild
+
+# check events are on kafka
+docker-compose exec mids kafkacat -C -b kafka:29092 -t events -o beginning -e
+
+# run events continuously
+docker-compose exec mids kafkacat -C -b kafka:29092 -t events -o beginning
+
+##### Apache Bench - Generates Test Data for Pipeline ######
+# switch to new terminal - navigate to project-3 directory
+cd w205/project-3-ruby-han/
+
+# create 10 events (default, purchase_a_sword, join_guild, purchase_an_axe) each by two users (user1.comcast.com and user2.att.com)
+docker-compose exec mids ab -n 10 -H "Host: user1.comcast.com" http://localhost:5000/
+docker-compose exec mids ab -n 10 -H "Host: user2.att.com" http://localhost:5000/
+docker-compose exec mids ab -n 10 -H "Host: user1.comcast.com" http://localhost:5000/purchase_a_sword
+docker-compose exec mids ab -n 10 -H "Host: user2.att.com" http://localhost:5000/purchase_a_sword
+docker-compose exec mids ab -n 10 -H "Host: user1.comcast.com" http://localhost:5000/join_a_guild
+docker-compose exec mids ab -n 10 -H "Host: user2.att.com" http://localhost:5000/join_a_guild
+docker-compose exec mids ab -n 10 -H "Host: user1.comcast.com" http://localhost:5000/purchase_an_axe
+docker-compose exec mids ab -n 10 -H "Host: user2.att.com" http://localhost:5000/purchase_an_axe
+
+##### Apache Spark in Jupyter Notebook #####
+# Set up link to jupyter notebook
+docker-compose exec spark bash
+
+# create symbolic link
+ln -s /w205 w205
+
+# exit
+exit or ctrl+d
+
+# spin up jupyter notebook
+docker-compose exec spark env PYSPARK_DRIVER_PYTHON=jupyter PYSPARK_DRIVER_PYTHON_OPTS='notebook --no-browser --port 8888 --ip 0.0.0.0 --allow-root' pyspark
+
+# copy + paste example link (changes with new VM instance) into incognito Chrome window
+# change external IP address from "View VM Details" in GCP
+
+http://35.247.22.116:8888/?token=e8869fcc1b03b41aad26041e2efa208763aa9c1841cb58fa
+
+##### Spin Down Docker #####
+# quit Flask and Jupyter Notebook using ctrl+c
+# spin down cluster
+docker-compose down
